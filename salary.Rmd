@@ -1,0 +1,152 @@
+---
+title: "Visualizing Salary by Undergraduate Major with K-Means Clustering"
+author: "Jay Shapiro"
+output: 
+  html_document:
+    theme: darkly
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(cluster)
+library(factoextra)
+
+salary <- read_delim("C:/Users/OneCalledSyn/Desktop/salary.tsv", 
+    "\t", escape_double = FALSE, col_names = c('College.Major', 'Starting.Median.Salary', 'Mid.Career.Median.Salary',
+                    'Career.Percent.Growth', 'Percentile.10', 'Percentile.25', 'Percentile.75', 'Percentile.90'), 
+    trim_ws = TRUE, skip = 1)
+
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+head(salary)
+summary(salary)
+
+salary_cleaned <- salary %>% 
+    mutate_at(vars(Starting.Median.Salary:Percentile.90), function(x) as.numeric(gsub('[\\$,]',"",x))) %>%
+    mutate(Career.Percent.Growth = Career.Percent.Growth / 100)
+
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+k_means_data <- salary_cleaned %>%
+    select(Starting.Median.Salary, Mid.Career.Median.Salary, Percentile.10, Percentile.90) %>%
+        scale()
+
+elbow_method <- fviz_nbclust(k_means_data, kmeans, method = 'wss')
+
+elbow_method
+
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+silhouette_method <- fviz_nbclust(k_means_data, kmeans, method = 'silhouette')
+
+silhouette_method
+
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+gap_stat <- clusGap(k_means_data, FUN = kmeans, nstart = 25, K.max = 10, B = 50)
+
+gap_stat_method <- fviz_gap_stat(gap_stat)
+
+gap_stat_method
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+set.seed(111)
+num_clusters <- 3
+
+k_means <- kmeans(k_means_data, centers = num_clusters, iter.max = 15, nstart = 25)
+
+salary_labeled <- salary_cleaned %>% mutate(clusters = k_means$cluster)
+
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+career_growth <- ggplot(salary_labeled, aes(x = Starting.Median.Salary, y = Mid.Career.Median.Salary,
+                    color = factor(clusters))) + geom_point() +
+                    scale_x_continuous(labels = scales::dollar) +
+                    scale_y_continuous(labels = scales::dollar) +
+                    xlab('Starting Median Salary') +
+                    ylab('Mid Career Median Salary') +
+                    scale_color_manual(name="Clusters",values=c("#EC2C73","#29AEC7", "#FFDD30")) +
+                    ggtitle('Starting Median vs. Mid Career Median Salaries')
+
+career_growth
+
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+salary_reorder <- salary_labeled %>%
+    select(College.Major, Percentile.10, Percentile.25, Mid.Career.Median.Salary, Percentile.75, Percentile.90, clusters) %>%
+    gather(-c(College.Major, clusters), key = percentile, value = salary) %>%
+    mutate(percentile=factor(percentile, levels = c('Percentile.10','Percentile.25',
+            'Mid.Career.Median.Salary','Percentile.75','Percentile.90')))
+
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+cluster_1 <- ggplot(salary_reorder[salary_reorder$clusters == 1, ], 
+                    aes(x=percentile, y=salary, 
+                    group=College.Major, color=College.Major, order=salary)) +
+                    geom_point() +
+                    geom_line() +
+                    ggtitle('Cluster 1: The Average Joes') +
+                    theme(axis.text.x = element_text(size=7, angle=25))
+
+cluster_1
+
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+cluster_2 <- ggplot(salary_reorder[salary_reorder$clusters == 2, ], 
+                    aes(x=percentile, y=salary, 
+                    group=College.Major, color=College.Major, order=salary)) +
+                    geom_point() +
+                    geom_line() +
+                    ggtitle('Cluster 2: The Bourgeoisie') +
+                    theme(axis.text.x = element_text(size=7, angle=25))
+
+cluster_2
+
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+cluster_3 <- ggplot(salary_reorder[salary_reorder$clusters == 3, ], 
+                    aes(x=percentile, y=salary, 
+                    group=College.Major, color=College.Major, order=salary)) +
+                    geom_point() +
+                    geom_line() +
+                    ggtitle('Cluster 3: The Grocery Baggers') +
+                    theme(axis.text.x = element_text(size=7, angle=25))
+
+cluster_3
+
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+
+arrange(salary_labeled, desc(Career.Percent.Growth))
+
+```
